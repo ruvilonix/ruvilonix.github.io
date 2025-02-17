@@ -45,7 +45,7 @@
 
             // Format output
             const output = usernames
-                .map((username, index) => `${index}: ${username}`)
+                .map((username, index) => `${index+1}: ${username}`)
                 .join('\n');
 
             document.getElementById('output').textContent = output || 'No usernames found';
