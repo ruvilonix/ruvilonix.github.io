@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Username Extractor</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 800px;
+            margin: 20px auto;
+            padding: 0 20px;
+        }
+        textarea {
+            width: 100%;
+            height: 200px;
+            margin: 10px 0;
+        }
+        #output {
+            white-space: pre-wrap;
+            background: #f5f5f5;
+            padding: 10px;
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+    <h2>Username Extractor</h2>
+    <p>Paste your text below:</p>
+    <textarea id="input" placeholder="Paste your text here..."></textarea>
+    <button onclick="extractUsernames()">Extract Usernames</button>
+    <div id="output"></div>
+
+    <script>
+        function extractUsernames() {
+            const text = document.getElementById('input').value;
+            const regex = /===\n\n(.+?) - [\S]+ [0-9]+,/g;
+            const matches = text.match(regex) || [];
+            
+            // Extract usernames and remove duplicates
+            const usernames = [...new Set(
+                matches.map(match => {
+                    const username = match.match(/===\n\n(.+?) - /)[1];
+                    return username;
+                })
+            )];
+
+            // Format output
+            const output = usernames
+                .map((username, index) => `${index}: ${username}`)
+                .join('\n');
+
+            document.getElementById('output').textContent = output || 'No usernames found';
+        }
+    </script>
+</body>
+</html>
