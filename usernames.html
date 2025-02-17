@@ -31,6 +31,7 @@
 
     <script>
         function extractUsernames() {
+            const text = document.getElementById('input').value;
 
             const usernames = [...new Set(
                 [...text.matchAll(/===\n\n(.+?) - [\S]+ [0-9]+,/g)].map(match => match[1])
