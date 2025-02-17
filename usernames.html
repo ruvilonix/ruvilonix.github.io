@@ -31,16 +31,9 @@
 
     <script>
         function extractUsernames() {
-            const text = document.getElementById('input').value;
-            const regex = /===\n\n(.+?) - [\S]+ [0-9]+,/g;
-            const matches = text.match(regex) || [];
-            
-            // Extract usernames and remove duplicates
+
             const usernames = [...new Set(
-                matches.map(match => {
-                    const username = match.match(/===\n\n(.+?) - /)[1];
-                    return username;
-                })
+                [...text.matchAll(/===\n\n(.+?) - [\S]+ [0-9]+,/g)].map(match => match[1])
             )];
 
             // Format output
