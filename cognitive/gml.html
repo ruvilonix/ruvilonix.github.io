@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Groton Maze Learning Test</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background-color: #f0f0f0;
+        }
+
+        #gameContainer {
+            width: 95vw;
+            max-width: 600px;
+            margin: auto;
+        }
+
+        #grid {
+            display: grid;
+            gap: 2px;
+            background-color: #ccc;
+            padding: 2px;
+            width: 100%;
+        }
+
+        .cell {
+            aspect-ratio: 1;
+            background-color: white;
+            border: 1px solid #999;
+            touch-action: manipulation;
+        }
+
+        #results {
+            margin-top: 20px;
+            text-align: center;
+            font-size: 1.2em;
+            padding: 10px;
+        }
+
+        .trial-info {
+            text-align: center;
+            margin-bottom: 10px;
+            font-size: 1.2em;
+        }
+        #instructions {
+            background-color: #fff;
+            padding: 15px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            line-height: 1.5;
+        }
+
+        button#modeToggle {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+        }
+
+        button#modeToggle:hover {
+            background-color: #45a049;
+        }
+
+        .seed-link {
+            background-color: #fff;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin: 10px auto;
+            max-width: 600px;
+        }
+
+        .seed-link a {
+            color: #4CAF50;
+            text-decoration: none;
+        }
+
+        .seed-link a:hover {
+            text-decoration: underline;
+        }
+        button#modeToggle, button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            margin: 0 5px;
+            font-size: 1.1em;
+        }
+
+        button#modeToggle:hover, button:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+
+    
+    <div style="text-align: center; margin: 20px;">
+        <button id="modeToggle" style="padding: 10px 20px; font-size: 1.1em;"></button>
+    </div>
+
+    <div id="gameContainer">
+        <div class="trial-info">Trial: <span id="trialNumber">1</span>/5</div>
+        <div id="grid"></div>
+        <div id="results"></div>
+    </div>
+
+    <div id="instructions" style="text-align: center; margin-bottom: 20px;">
+        Follow the path as quickly as possible from the top left to the bottom right by clicking adjacent squares. 
+        <br><br>
+        The correct path will be marked in yellow. Incorrect moves will flash red. Complete 5 trials of the exact same path to finish the test. 
+        <br><br>
+        Full path is 28 squares long. Result is shown as correct moves per second, with time starting at the first click.
+    </div>
+
+    <script>
+        class SeededRandom {
+            constructor(seed) {
+                this.seed = seed;
+            }
+
+            // Returns a random number between 0 and 1
+            random() {
+                const x = Math.sin(this.seed++) * 10000;
+                return x - Math.floor(x);
+            }
+        }
+        
+        class GMLTest {
+            constructor(size = 10, path_length = 28) {
+                // Get URL parameters
+                const urlParams = new URLSearchParams(window.location.search);
+                const isPractice = urlParams.get('practice') === 'true';
+                const pathSeed = urlParams.get('seed');
+                
+                // Set seed
+                this.seed = pathSeed ? parseInt(pathSeed) : this.generateRandomSeed();
+                this.rng = new SeededRandom(this.seed);
+                
+                // Display seed link
+                this.displaySeedLink();
+                
+                // Adjust size and path length for practice mode
+                if (isPractice) {
+                    size = 3;
+                    path_length = 4;
+                }
+                
+                this.size = size;
+                this.pathLength = Math.min(path_length, Math.floor(size * size * 0.8));
+
+
+                this.currentPath = [];
+                this.currentPosition = 0;
+                this.trialNumber = 1;
+                this.errors = 0;
+                this.moves = 0;
+                this.startTime = null;
+
+                this.recentCells = [];
+                
+                this.grid = document.getElementById('grid');
+                this.resultsDiv = document.getElementById('results');
+                this.trialNumberSpan = document.getElementById('trialNumber');
+                
+                // Set grid template columns based on size
+                this.grid.style.gridTemplateColumns = `repeat(${this.size}, 1fr)`;
+                
+                this.createGrid();
+                this.generatePath();
+                this.startTrial();
+                
+                // Mobile-friendly event handling
+                this.grid.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    const cell = e.target;
+                    if (cell.classList.contains('cell')) {
+                        this.handleClick(cell);
+                    }
+                });
+                
+                this.grid.addEventListener('click', (e) => {
+                    const cell = e.target;
+                    if (cell.classList.contains('cell')) {
+                        this.handleClick(cell);
+                    }
+                });
+            }
+
+            generateRandomSeed() {
+                return Math.floor(Math.random() * 1000000);
+            }
+
+            displaySeedLink() {
+                const currentUrl = new URL(window.location.href);
+                currentUrl.searchParams.set('seed', this.seed);
+                const linkDiv = document.createElement('div');
+                linkDiv.style.textAlign = 'center';
+                linkDiv.style.margin = '10px';
+                linkDiv.innerHTML = `Seed: ${this.seed} <br><a href="${currentUrl.href}">Link to this exact puzzle</a>`;
+                document.body.insertBefore(linkDiv, document.getElementById('gameContainer'));
+            }
+
+            createGrid() {
+                for (let i = 0; i < this.size; i++) {
+                    for (let j = 0; j < this.size; j++) {
+                        const cell = document.createElement('div');
+                        cell.classList.add('cell');
+                        cell.dataset.row = i;
+                        cell.dataset.col = j;
+                        this.grid.appendChild(cell);
+                    }
+                }
+            }
+
+            generatePath() {
+                const size = this.size;
+                const target = [size - 1, size - 1];
+                
+                function manhattanDistance(x1, y1, x2, y2) {
+                    return Math.abs(x2 - x1) + Math.abs(y2 - y1);
+                }
+
+                function canReachEnd(x, y, remainingSteps, targetX, targetY) {
+                    const distanceToEnd = manhattanDistance(x, y, targetX, targetY);
+                    return distanceToEnd <= remainingSteps && (remainingSteps - distanceToEnd) % 2 === 0;
+                }
+
+                function checkStraightLine(grid, x, y, dx, dy) {
+                    let count = 1;
+                    let currX = x, currY = y;
+                    while (true) {
+                        currX -= dx;
+                        currY -= dy;
+                        if (currX >= 0 && currX < size && 
+                            currY >= 0 && currY < size && 
+                            grid[currY][currX] === 1) {
+                            count++;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    currX = x;
+                    currY = y;
+                    while (true) {
+                        currX += dx;
+                        currY += dy;
+                        if (currX >= 0 && currX < size && 
+                            currY >= 0 && currY < size && 
+                            grid[currY][currX] === 1) {
+                            count++;
+                        } else {
+                            break;
+                        }
+                    }
+                    
+                    return count <= 5;
+                }
+
+                // Initialize grid and path
+                const grid = Array(size).fill().map(() => Array(size).fill(0));
+                let path = [];
+                let current = [0, 0];
+                let stepsTaken = 1;
+                path.push(current);
+                grid[current[1]][current[0]] = 1;
+
+                // Generate path
+                while (stepsTaken < this.pathLength || 
+                    (current[0] !== target[0] || current[1] !== target[1])) {
+                    const [x, y] = current;
+                    let possibleMoves = [];
+                    
+                    for (const [dx, dy] of [[0, 1], [1, 0], [0, -1], [-1, 0]]) {
+                        const newX = x + dx;
+                        const newY = y + dy;
+                        
+                        if (newX >= 0 && newX < size && 
+                            newY >= 0 && newY < size && 
+                            grid[newY][newX] === 0 && 
+                            checkStraightLine(grid, newX, newY, dx, dy)) {
+                            
+                            // Check if we can reach the end with remaining steps
+                            if (!canReachEnd(newX, newY, this.pathLength - stepsTaken, target[0], target[1])) {
+                                continue;
+                            }
+                            
+                            const distanceToTarget = manhattanDistance(newX, newY, target[0], target[1]);
+                            possibleMoves.push({
+                                pos: [newX, newY],
+                                distance: distanceToTarget
+                            });
+                        }
+                    }
+                    
+                    if (possibleMoves.length === 0) {
+                        // If we're stuck, start over
+                        grid.forEach(row => row.fill(0));
+                        path = [];
+                        current = [0, 0];
+                        stepsTaken = 1;
+                        path.push(current);
+                        grid[current[1]][current[0]] = 1;
+                        continue;
+                    }
+                    
+                    // Sort moves by distance to target and choose one with some randomness
+                    possibleMoves.sort((a, b) => a.distance - b.distance);
+                    const moveIndex = Math.floor(this.rng.random() * Math.min(possibleMoves.length, 3));
+                    current = possibleMoves[moveIndex].pos;
+                    path.push(current);
+                    grid[current[1]][current[0]] = 1;
+                    stepsTaken++;
+
+                    // If we've reached the target and have the exact number of steps, we're done
+                    if (current[0] === target[0] && current[1] === target[1] && 
+                        stepsTaken === this.pathLength) {
+                        break;
+                    }
+                }
+
+                this.currentPath = path;
+                return path;
+            }
+
+            getCell(row, col) {
+                return document.querySelector(`.cell[data-row="${row}"][data-col="${col}"]`);
+            }
+
+            handleClick(cell) {
+                if (this.trialNumber > 5) return;
+                
+                if (!this.startTime) {
+                    this.startTime = Date.now();
+                }
+                
+                const row = parseInt(cell.dataset.row);
+                const col = parseInt(cell.dataset.col);
+                const targetPos = this.currentPath[this.currentPosition + 1];
+                
+                if (row === targetPos[0] && col === targetPos[1]) {
+                    // Correct move
+                    cell.style.backgroundColor = 'yellow';
+                    
+                    // Add the cell to recent cells
+                    this.recentCells.push(cell);
+                    
+                    // If we have more than 3 recent cells, remove the oldest one's highlight
+                    if (this.recentCells.length > 3) {
+                        this.recentCells[0].style.backgroundColor = 'white';
+                        this.recentCells.shift();
+                    }
+                    
+                    this.currentPosition++;
+                    this.moves++;
+                    
+                    if (this.currentPosition === this.currentPath.length - 1) {
+                        this.trialNumber++;
+                        if (this.trialNumber <= 5) {
+                            this.recentCells = []; // Clear recent cells for new trial
+                            this.startTrial();
+                        } else {
+                            // Test complete
+                            const totalTime = (Date.now() - this.startTime) / 1000;
+                            const movesPerSecond = this.moves / totalTime;
+                            this.resultsDiv.innerHTML = `
+                                <strong>Test Complete!</strong><br><br>
+                                Total moves: ${this.moves}<br>
+                                Total time: ${totalTime.toFixed(2)} seconds<br>
+                                Moves per second: ${movesPerSecond.toFixed(2)}
+                            `;
+                        }
+                    }
+                } else {
+                    // Incorrect move
+                    this.errors++;
+                    cell.style.backgroundColor = 'red';
+                    setTimeout(() => {
+                        cell.style.backgroundColor = 'white';
+                    }, 500);
+                }
+            }
+
+            startTrial() {
+                this.currentPosition = 0;
+                this.trialNumberSpan.textContent = this.trialNumber;
+                // Reset all cells to white
+                document.querySelectorAll('.cell').forEach(cell => {
+                    cell.style.backgroundColor = 'white';
+                });
+                
+                // Clear recent cells array
+                this.recentCells = [];
+                
+                // Show start position
+                const [startI, startJ] = this.currentPath[0];
+                const startCell = this.getCell(startI, startJ);
+                startCell.style.backgroundColor = 'yellow';
+                this.recentCells.push(startCell);
+            }
+
+            debugGeneratePaths(numPaths = 10) {
+                console.log(`Generating ${numPaths} paths for ${this.size}x${this.size} grid:`);
+                for (let i = 0; i < numPaths; i++) {
+                    const path = this.generatePath();
+                    console.log(`\nPath ${i + 1}:`);
+                    console.log(this.visualizePath(path));
+                }
+            }
+
+            visualizePath(path) {
+                // Create a grid of dots
+                let grid = Array(this.size).fill().map(() => Array(this.size).fill('.'));
+                
+                // Mark path with X
+                path.forEach(pos => {
+                    grid[pos[1]][pos[0]] = 'X';
+                });
+                
+                // Convert to string representation
+                return grid.map(row => row.join(' ')).join('\n');
+            }
+        }
+
+        // Start the game when the page loads
+        window.onload = () => {
+            const urlParams = new URLSearchParams(window.location.search);
+            const isPractice = urlParams.get('practice') === 'true';
+            const seed = urlParams.get('seed');
+            
+            // If no seed is provided, generate one and redirect
+            if (!seed) {
+                const newSeed = Math.floor(Math.random() * 1000000);
+                const newUrl = new URL(window.location.href);
+                newUrl.searchParams.set('seed', newSeed);
+                if (isPractice) {
+                    newUrl.searchParams.set('practice', 'true');
+                }
+                window.location.href = newUrl.href;
+                return;
+            }
+            
+            // Setup mode toggle button
+            const modeToggleBtn = document.getElementById('modeToggle');
+            if (isPractice) {
+                modeToggleBtn.textContent = 'Play Full Version';
+                modeToggleBtn.onclick = () => {
+                    const newUrl = new URL(window.location.pathname, window.location.origin);
+                    newUrl.searchParams.set('seed', seed);
+                    window.location.href = newUrl.href;
+                };
+            } else {
+                modeToggleBtn.textContent = 'Try Practice Version';
+                modeToggleBtn.onclick = () => {
+                    const newUrl = new URL(window.location.pathname, window.location.origin);
+                    newUrl.searchParams.set('seed', seed);
+                    newUrl.searchParams.set('practice', 'true');
+                    window.location.href = newUrl.href;
+                };
+            }
+
+            // Add New Path button
+            const newPathBtn = document.createElement('button');
+            newPathBtn.textContent = 'New Path';
+            newPathBtn.style.cssText = modeToggleBtn.style.cssText; // Copy existing button styles
+            newPathBtn.onclick = () => {
+                const newUrl = new URL(window.location.pathname, window.location.origin);
+                const newSeed = Math.floor(Math.random() * 1000000);
+                newUrl.searchParams.set('seed', newSeed);
+                if (isPractice) {
+                    newUrl.searchParams.set('practice', 'true');
+                }
+                window.location.href = newUrl.href;
+            };
+            modeToggleBtn.parentElement.appendChild(newPathBtn);
+            
+            // Initialize game
+            const game = new GMLTest(isPractice ? 3 : 10, isPractice ? 4 : 28);
+        };
+    </script>
+</body>
+</html>
